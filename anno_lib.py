@@ -4,13 +4,14 @@ import csv
 import argparse
 import sys
 from abc import ABCMeta, abstractmethod
-from pathlib import Path, PureWindowsPath
-import json
 import pathlib
-from typing import Dict, List, Tuple, TypeVar
+import json
+import warnings
+from typing import Dict, List, Tuple
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element, SubElement
 from lxml import etree
+import cv2
 
 from os.path import relpath
 import codecs
@@ -18,13 +19,33 @@ import codecs
 BOX_TYPE = Tuple[int, int, int, int, str]
 
 
-def add_shape(bndbox, label):
-    """ each line adds (x1, y1, x2, y2, label) """
-    xmin = int(bndbox.find('xmin').text)
-    ymin = int(bndbox.find('ymin').text)
-    xmax = int(bndbox.find('xmax').text)
-    ymax = int(bndbox.find('ymax').text)
-    return (xmin, ymin, xmax, ymax, label)
+def create_corresponding_file(folder: pathlib.Path,
+                              corresponding_file: pathlib.Path,
+                              extension: str) -> pathlib.Path:
+    """ Given: foler ('User/Desktop/'), file ('/yolo/foobar.jpg')
+    extension('.xml'). Create: 'User/Desktop/foobar.xml"""
+    orig_name_without_suffix = corresponding_file.stem
+    new_name = orig_name_without_suffix + extension
+    new_file = folder / new_name
+
+    return new_file
+
+
+def write_pascal_voc(img_folder_name: str, img_file_name: str,
+                     img_shape: List[int], xml_file: str, img_path: str,
+                     boxes: List[BOX_TYPE]):
+    """ helper function to use PascalVocWriter class """
+    writer = PascalVocWriter(
+        img_folder_name,
+        img_file_name,
+        img_shape,
+        xmlFile=xml_file,
+        localImgPath=img_path)
+    writer.verified = False
+    for box in boxes:
+        x_1, y_1, x_2, y_2, label = box
+        writer.addBndBox(x_1, y_1, x_2, y_2, label, False)
+    writer.save(xml_file)
 
 
 class AnnoParser(metaclass=ABCMeta):
@@ -32,7 +53,7 @@ class AnnoParser(metaclass=ABCMeta):
 
     def __init__(self, extension, encoding):
         self.xml_ext = extension
-        self.encode_method = encoding
+        self.encode_method = encoding  # type: List[Dict]
         # self.shapes = [{'bbox' =[(x1, y1, x2, y2, 'lable')], 'img_path' = ''}]
         self.shapes = []
         super().__init__()
@@ -44,6 +65,8 @@ class AnnoParser(metaclass=ABCMeta):
             return XmlParser(extension, encoding)
         elif extension == '.json':
             return MatlabParser(extension, encoding)
+        elif extension == '.csv':
+            return CSVParser(extension, encoding)
         else:
             raise ValueError('Unsupported file type')
 
@@ -67,6 +90,46 @@ class AnnoParser(metaclass=ABCMeta):
             return self.shapes
         self.parse_anno()
         return self.shapes
+
+
+class CSVParser(AnnoParser):
+    """ CSV (i.e. Retinanet) annotations parser """
+
+    def __init__(self, extension, encoding):
+        super().__init__(extension, encoding)
+        self.anno_file = None  # type: pathlib.Path
+
+    def set_anno_file(self, path: str) -> None:
+        """ Add annotations for given file """
+        self.anno_file = pathlib.Path(path)
+
+    def parse_anno(self) -> None:
+        proto_data = self._create_proto_anno(
+        )  # type: Dict[str, List[Tuple[int, int, int, int, str]]]
+        for path, custom_anno in proto_data.items():
+            img_annos = {}  # type: Dict
+            img_annos['img_path'] = path
+            img_annos['bbox'] = custom_anno
+            self.shapes.append(img_annos)
+
+    def _create_proto_anno(
+            self) -> Dict[str, List[Tuple[int, int, int, int, str]]]:
+        """ intermediate representation of annotations """
+        proto_data = {}  #type: Dict[str, List[Tuple[int, int, int, int, str]]]
+        with self.anno_file.open('r', newline='') as csvfile:
+            anno_reader = csv.reader(
+                csvfile,
+                delimiter=',',
+                quotechar='"',
+                quoting=csv.QUOTE_MINIMAL)
+            for anno_line in anno_reader:
+                img_path = anno_line[0]
+                box = (int(anno_line[1]), int(anno_line[2]), int(anno_line[3]),
+                       int(anno_line[4]), anno_line[5])
+                if img_path not in proto_data:
+                    proto_data[img_path] = []
+                proto_data[img_path].append(box)
+        return proto_data
 
 
 class MatlabParser(AnnoParser):
@@ -93,7 +156,7 @@ class MatlabParser(AnnoParser):
 
     @imgs_folder.setter
     def imgs_folder(self, path):
-        self._imgs_folder = Path(path)
+        self._imgs_folder = pathlib.Path(path)
 
     @property
     def anno_path(self):
@@ -102,11 +165,11 @@ class MatlabParser(AnnoParser):
 
     @anno_path.setter
     def anno_path(self, path):
-        self._anno_path = Path(path)
+        self._anno_path = pathlib.Path(path)
 
     def fix_img_path(self, img_path):
         """ Fix image location according to provided folder """
-        path = PureWindowsPath(img_path)
+        path = pathlib.PureWindowsPath(img_path)
         my_path = self._imgs_folder / path.name
         return my_path.as_posix()
 
@@ -142,12 +205,21 @@ class XmlParser(AnnoParser):
     @folder_path.setter
     def folder_path(self, path):
         """ set path to folder with .xml file """
-        self._folder_path = Path(path)
+        self._folder_path = pathlib.Path(path)
         self.file_paths = sorted(list(self._folder_path.glob('*.xml')))
+
+    @staticmethod
+    def add_shape(bndbox, label):
+        """ each line adds (x1, y1, x2, y2, label) """
+        xmin = int(bndbox.find('xmin').text)
+        ymin = int(bndbox.find('ymin').text)
+        xmax = int(bndbox.find('xmax').text)
+        ymax = int(bndbox.find('ymax').text)
+        return (xmin, ymin, xmax, ymax, label)
 
     def img_abs_path(self, img_rel_path):
         """ return absolute path of image, for traing """
-        temp_path = PureWindowsPath(img_rel_path)
+        temp_path = pathlib.PureWindowsPath(img_rel_path)
         img_rel_path = temp_path.as_posix()
         img_path = self._folder_path / img_rel_path
 
@@ -174,7 +246,7 @@ class XmlParser(AnnoParser):
                 bndbox = object_iter.find('bndbox')
                 label = object_iter.find('name').text
                 # Assume dificulty False
-                my_box = add_shape(bndbox, label)
+                my_box = self.add_shape(bndbox, label)
                 self.shapes[i]['bbox'].append(my_box)
 
 
@@ -238,16 +310,19 @@ class CSVWriter(AnnoWriter):
 
 
 class XMLWriter(AnnoWriter):
-    """ Implementation for writting VOC .xml to destinated folder """
+    """ Implementation for writting VOC .xml to destinated folder
+    Very heavy since images are open to find size """
 
     def __init__(self, parser_obj: AnnoParser, binary: bool) -> None:
         super().__init__(parser_obj, binary)
         self.out_folder = None  # type: pathlib.Path
         self.img_vs_boxes = self._transform_data_to_dict()
 
-    def set_output_folder(self, out_folder: pathlib.Path) -> None:
+    def set_output_folder(self, out_folder: str) -> None:
         """ Set file to store the annotations """
-        self.out_folder = out_folder
+        self.out_folder = pathlib.Path(out_folder)
+        if not self.out_folder.exists():
+            raise ValueError("Output folder doesn't exist")
 
     def _transform_data_to_dict(self) -> Dict[str, List[BOX_TYPE]]:
         """ Transform data to dict of anno according to img name """
@@ -262,8 +337,26 @@ class XMLWriter(AnnoWriter):
                 img_vs_boxes[img_file['img_path']].append(box)
         return img_vs_boxes
 
-    def write(self):
-        """ Writing .xml file to folder """
+    def write(self) -> None:
+        for img_path, boxes in self.img_vs_boxes.items():
+            path = pathlib.Path(img_path)
+            if not path.exists():
+                warnings.warn(
+                    "File {} doesn't exists".format(path),
+                    category=RuntimeWarning)
+                continue
+            img_folder_name = path.parts[-2]
+            img_file_name = path.parts[-1]
+            new_file_path = create_corresponding_file(self.out_folder, path,
+                                                      '.xml')
+            xml_file = str(new_file_path)
+            img = cv2.imread(str(path))  #very heavy
+            print(
+                "Reading file {} to find its dimentions, please wait...".format(
+                    img_file_name))
+            img_shape = list(img.shape)
+            write_pascal_voc(img_folder_name, img_file_name, img_shape,
+                             xml_file, str(path), boxes)
 
 
 class PascalVocWriter:
@@ -412,8 +505,8 @@ def parse_args(args):
 def main(args=None):
     """ Main program, as a function to avoid setting up grobal variables """
     args = parse_args(args)
-    my_parser = AnnoParser.create_parser('.xml', 'utf-8')
-    my_parser.folder_path = args.input_folder
+    my_parser = AnnoParser.create_parser('.csv', 'utf-8')
+    my_parser.set_anno_file('../sdsgwas/src/eval.csv')
     my_data = my_parser.anno_data
     my_writer = AnnoWriter.create_writer(
         my_parser, binary=args.binary, anno_format='xml')
