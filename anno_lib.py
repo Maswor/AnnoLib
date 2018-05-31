@@ -534,7 +534,8 @@ def select_parser(arg_input: str) -> AnnoParser:
         my_parser = AnnoParser.create_parser('.json', 'utf-8')
         my_parser.anno_path = arg_input
     else:
-        raise ValueError("Unsupported Reading method")
+        raise ValueError(
+            "Input path doesn't exist or unsupported Reading method")
 
     return my_parser
 
@@ -548,9 +549,10 @@ def select_writer(arg_output: str, parser: AnnoParser,
         my_writer.set_output_folder(arg_output)
     elif m_output.suffix == '.csv':
         my_writer = AnnoWriter.create_writer(parser, binary, '.csv')
-        my_writer.set_output_folder(arg_output)
+        my_writer.set_output_file(arg_output)
     else:
-        raise ValueError("Unsupported Writing method")
+        raise ValueError(
+            "Output path doesn't exist or unsupported writing method")
 
     return my_writer
 
