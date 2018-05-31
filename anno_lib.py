@@ -548,7 +548,7 @@ def select_writer(arg_output: str, parser: AnnoParser,
         my_writer.set_output_folder(arg_output)
     elif m_output.suffix == '.csv':
         my_writer = AnnoWriter.create_writer(parser, binary, '.csv')
-        my_writer.set_output_folder(arg_output)
+        my_writer.set_output_file(arg_output)
     else:
         raise ValueError(
             "Output path doesn't exist or unsupported writing method")
