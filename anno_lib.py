@@ -95,8 +95,9 @@ class CSVParser(AnnoParser):
                 quoting=csv.QUOTE_MINIMAL)
             for anno_line in anno_reader:
                 img_path = anno_line[0]
-                box = (int(anno_line[1]), int(anno_line[2]), int(anno_line[3]),
-                       int(anno_line[4]), anno_line[5])
+                box = (int(float(anno_line[1])), int(float(anno_line[2])),
+                       int(float(anno_line[3])), int(float(anno_line[4])),
+                       anno_line[5])
                 if img_path not in proto_data:
                     proto_data[img_path] = []
                 proto_data[img_path].append(box)
