@@ -1,20 +1,17 @@
 """ Internal Libs for manipulating annotations"""
-
+import codecs
 import csv
-import argparse
-import sys
-from abc import ABCMeta, abstractmethod
-import pathlib
 import json
+import pathlib
 import warnings
-from typing import Dict, List, Tuple
+from abc import ABCMeta, abstractmethod
+from os.path import relpath
+from typing import Dict, List, Optional, Tuple
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element, SubElement
-from lxml import etree
-import cv2
 
-from os.path import relpath
-import codecs
+import cv2
+from lxml import etree
 
 BOX_TYPE = Tuple[int, int, int, int, str]
 
@@ -86,7 +83,8 @@ class CSVParser(AnnoParser):
     def _create_proto_anno(
             self) -> Dict[str, List[Tuple[int, int, int, int, str]]]:
         """ intermediate representation of annotations """
-        proto_data = {}  #type: Dict[str, List[Tuple[int, int, int, int, str]]]
+        proto_data = {
+        }  # type: Dict[str, List[Tuple[int, int, int, int, str]]]
         with self.anno_file.open('r', newline='') as csvfile:
             anno_reader = csv.reader(
                 csvfile,
@@ -287,7 +285,7 @@ class XMLWriter(AnnoWriter):
 
     def __init__(self, parser_obj: AnnoParser, binary: bool) -> None:
         super().__init__(parser_obj, binary)
-        self.out_folder = None  # type: pathlib.Path
+        self.out_folder: Optional[pathlib.Path] = None
         self.img_vs_boxes = self._transform_data_to_dict()
 
     def set_output_folder(self, out_folder: str) -> None:
@@ -319,10 +317,11 @@ class XMLWriter(AnnoWriter):
                 continue
             img_folder_name = path.parts[-2]
             img_file_name = path.parts[-1]
+            assert self.out_folder is not None
             new_file_path = create_corresponding_file(self.out_folder, path,
                                                       '.xml')
             xml_file = str(new_file_path)
-            img = cv2.imread(str(path))  #very heavy
+            img = cv2.imread(str(path))  # very heavy
             print(
                 "Reading file {} to find its dimentions, please wait...".format(
                     img_file_name))
@@ -488,84 +487,3 @@ def write_pascal_voc(img_folder_name: str, img_file_name: str,
         x_1, y_1, x_2, y_2, label = box
         writer.addBndBox(x_1, y_1, x_2, y_2, label, False)
     writer.save(xml_file)
-
-
-def parse_args(args):
-    """ Parsing a provided argument """
-    parser = argparse.ArgumentParser(
-        description="Simple parser script for infering Keras-Retinanet on image"
-    )
-    parser.add_argument(
-        'input',
-        help="Input annotation, either folder (of .xml) or file (.csv, .json)")
-    parser.add_argument(
-        'output',
-        help="Output annotation, either file (of .csv) or folder (.xml, .json)")
-    parser.add_argument(
-        '--binary', help="Binary annotation", action='store_true')
-    return parser.parse_args(args)
-
-
-def print_info(anno_data):
-    """ Printing boxes information """
-    total_imgs = 0
-    total_boxes = 0
-    boxes_indices = [0 for _ in range(10)]
-    for img_file in anno_data:
-        total_imgs += 1
-        total_boxes += len(img_file['bbox'])
-        for box in img_file['bbox']:
-            boxes_indices[int(box[4])] += 1
-    print("There are {} images with {} boxes".format(total_imgs, total_boxes))
-    print("Of which, number for DS score from 0 - 9 are: {}".format(
-        boxes_indices))
-
-
-def select_parser(arg_input: str) -> AnnoParser:
-    """ Parser selection depending on arg_input """
-    m_input = pathlib.Path(arg_input)
-    if m_input.is_dir():
-        my_parser = AnnoParser.create_parser('.xml', 'utf-8')
-        my_parser.folder_path = arg_input
-    elif m_input.suffix == '.csv':
-        my_parser = AnnoParser.create_parser('.csv', 'utf-8')
-        my_parser.set_anno_file(arg_input)
-    elif m_input.suffix == '.json':
-        my_parser = AnnoParser.create_parser('.json', 'utf-8')
-        my_parser.anno_path = arg_input
-    else:
-        raise ValueError(
-            "Input path doesn't exist or unsupported Reading method")
-
-    return my_parser
-
-
-def select_writer(arg_output: str, parser: AnnoParser,
-                  binary: bool) -> AnnoWriter:
-    """ Writer selection depending on arg_output """
-    m_output = pathlib.Path(arg_output)
-    if m_output.is_dir():
-        my_writer = AnnoWriter.create_writer(parser, binary, '.xml')
-        my_writer.set_output_folder(arg_output)
-    elif m_output.suffix == '.csv':
-        my_writer = AnnoWriter.create_writer(parser, binary, '.csv')
-        my_writer.set_output_file(arg_output)
-    else:
-        raise ValueError(
-            "Output path doesn't exist or unsupported writing method")
-
-    return my_writer
-
-
-def main(args=None):
-    """ Main program, as a function to avoid setting up grobal variables """
-    p_args = parse_args(args)
-    my_parser = select_parser(p_args.input)
-    my_data = my_parser.anno_data  # lazily parsing annos on demand
-    my_writer = select_writer(p_args.output, my_parser, p_args.binary)
-    my_writer.write()
-    print_info(my_data)
-
-
-if __name__ == '__main__':
-    sys.exit(main(sys.argv[1:]))
