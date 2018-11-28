@@ -6,24 +6,40 @@ import pathlib
 import warnings
 from abc import ABCMeta, abstractmethod
 from os.path import relpath
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, NamedTuple, Optional, Tuple
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element, SubElement
 
 import cv2
 from lxml import etree
 
-BOX_TYPE = Tuple[int, int, int, int, str]
+
+class BOX_TYPE(NamedTuple):
+    x_1: int
+    y_1: int
+    x_2: int
+    y_2: int
+    label: str
+
+
+ImageAnnoDict = Dict[str, List[BOX_TYPE]]
+
+
+class AnnosPerImage(NamedTuple):
+    bbox: List[BOX_TYPE]
+    img_path: str
+
+
+AnnoDatabase = List[AnnosPerImage]
 
 
 class AnnoParser(metaclass=ABCMeta):
     """Abstract class for xml parser and matlab file parser"""
 
-    def __init__(self, extension, encoding):
+    def __init__(self, extension: str, encoding) -> None:
         self.xml_ext = extension
-        self.encode_method = encoding  # type: List[Dict]
-        # self.shapes = [{'bbox' =[(x1, y1, x2, y2, 'lable')], 'img_path' = ''}]
-        self.shapes = []
+        self.encode_method: List[Dict] = encoding
+        self.shapes: AnnoDatabase = []
         super().__init__()
 
     @staticmethod
@@ -51,7 +67,7 @@ class AnnoParser(metaclass=ABCMeta):
         """
         smart getter, just call my_parser.Anno_Data, it will check
         if ParseAnno has run yet and return annotation data.
-        self.shapes = [{'bbox' =[(x1, y1, x2, y2, 'lable')], 'img_path' = ''}]
+        self.shapes = [{'bbox' =[(x1, y1, x2, y2, 'label')], 'img_path' = ''}]
 
         """
         if self.shapes:
@@ -225,7 +241,7 @@ class AnnoWriter(metaclass=ABCMeta):
 
     def __init__(self, parser_obj: AnnoParser, binary: bool = False) -> None:
         self.data = parser_obj.anno_data
-        # List[Dict['bbox' =[(x1, y1, x2, y2, 'lable')], 'img_path' = '']]
+        # List[Dict['bbox' =[(x1, y1, x2, y2, 'label')], 'img_path' = '']]
         self.binary = binary
 
     @staticmethod
@@ -294,9 +310,9 @@ class XMLWriter(AnnoWriter):
         if not self.out_folder.exists():
             raise ValueError("Output folder doesn't exist")
 
-    def _transform_data_to_dict(self) -> Dict[str, List[BOX_TYPE]]:
+    def _transform_data_to_dict(self) -> ImageAnnoDict:
         """ Transform data to dict of anno according to img name """
-        img_vs_boxes = {}  # type: Dict[str, List[BOX_TYPE]]
+        img_vs_boxes: ImageAnnoDict = {}
         for img_file in self.data:
             for box in img_file['bbox']:
                 box = self.binary_transform(box)
@@ -484,6 +500,5 @@ def write_pascal_voc(img_folder_name: str, img_file_name: str,
         localImgPath=img_path)
     writer.verified = False
     for box in boxes:
-        x_1, y_1, x_2, y_2, label = box
-        writer.addBndBox(x_1, y_1, x_2, y_2, label, False)
+        writer.addBndBox(box.x_1, box.y_1, box.x_2, box.y_2, box.label, False)
     writer.save(xml_file)
