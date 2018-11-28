@@ -36,26 +36,26 @@ AnnoDatabase = List[AnnosPerImage]
 class AnnoParser(metaclass=ABCMeta):
     """Abstract class for xml parser and matlab file parser"""
 
-    def __init__(self, extension: str, encoding) -> None:
+    def __init__(self, extension: str, encoding: str) -> None:
         self.xml_ext = extension
-        self.encode_method: List[Dict] = encoding
+        self.encode_method = encoding
         self.shapes: AnnoDatabase = []
         super().__init__()
 
     @staticmethod
-    def create_parser(extension='.xml', encoding='utf-8'):
+    def create_parser(extension: str = '.xml',
+                      encoding: str = 'utf-8') -> "AnnoParser":
         """ Delegate parser base on extension """
         if extension == '.xml':
             return XmlParser(extension, encoding)
-        elif extension == '.json':
+        if extension == '.json':
             return MatlabParser(extension, encoding)
-        elif extension == '.csv':
+        if extension == '.csv':
             return CSVParser(extension, encoding)
-        else:
-            raise ValueError('Unsupported file type')
+        raise ValueError('Unsupported file type')
 
     @abstractmethod
-    def parse_anno(self):
+    def parse_anno(self) -> None:
         """
         abstract method, will be implemented diffirently by children
         parse annotation either form .xml file or matlab json file
@@ -63,7 +63,7 @@ class AnnoParser(metaclass=ABCMeta):
         pass
 
     @property
-    def anno_data(self):
+    def anno_data(self) -> AnnoDatabase:
         """
         smart getter, just call my_parser.Anno_Data, it will check
         if ParseAnno has run yet and return annotation data.
@@ -79,28 +79,24 @@ class AnnoParser(metaclass=ABCMeta):
 class CSVParser(AnnoParser):
     """ CSV (i.e. Retinanet) annotations parser """
 
-    def __init__(self, extension, encoding):
+    def __init__(self, extension: str, encoding: str) -> None:
         super().__init__(extension, encoding)
-        self.anno_file = None  # type: pathlib.Path
+        self.anno_file: Optional[pathlib.Path] = None
 
     def set_anno_file(self, path: str) -> None:
         """ Add annotations for given file """
         self.anno_file = pathlib.Path(path)
 
     def parse_anno(self) -> None:
-        proto_data = self._create_proto_anno(
-        )  # type: Dict[str, List[Tuple[int, int, int, int, str]]]
+        proto_data = self._create_proto_anno()
         for path, custom_anno in proto_data.items():
-            img_annos = {}  # type: Dict
-            img_annos['img_path'] = path
-            img_annos['bbox'] = custom_anno
+            img_annos = AnnosPerImage(custom_anno, path)
             self.shapes.append(img_annos)
 
-    def _create_proto_anno(
-            self) -> Dict[str, List[Tuple[int, int, int, int, str]]]:
+    def _create_proto_anno(self) -> ImageAnnoDict:
         """ intermediate representation of annotations """
-        proto_data = {
-        }  # type: Dict[str, List[Tuple[int, int, int, int, str]]]
+        proto_data: ImageAnnoDict = {}
+        assert self.anno_file is not None
         with self.anno_file.open('r', newline='') as csvfile:
             anno_reader = csv.reader(
                 csvfile,
@@ -109,9 +105,11 @@ class CSVParser(AnnoParser):
                 quoting=csv.QUOTE_MINIMAL)
             for anno_line in anno_reader:
                 img_path = anno_line[0]
-                box = (int(float(anno_line[1])), int(float(anno_line[2])),
-                       int(float(anno_line[3])), int(float(anno_line[4])),
-                       anno_line[5])
+                box = BOX_TYPE(int(float(anno_line[1])),
+                               int(float(anno_line[2])),
+                               int(float(anno_line[3])),
+                               int(float(anno_line[4])),
+                               anno_line[5])
                 if img_path not in proto_data:
                     proto_data[img_path] = []
                 proto_data[img_path].append(box)
@@ -129,49 +127,54 @@ class MatlabParser(AnnoParser):
     5th: fclose(fid)
     """
 
-    def __init__(self, extension='.json', encoding='utf-8'):
+    def __init__(self, extension: str = '.json',
+                 encoding: str = 'utf-8') -> None:
         """ x, y, width, height """
-        self._anno_path = None
-        self._imgs_folder = None
+        self._anno_path: Optional[pathlib.Path] = None
+        self._imgs_folder: Optional[pathlib.Path] = None
         super().__init__(extension, encoding)
 
     @property
-    def imgs_folder(self):
+    def imgs_folder(self) -> pathlib.Path:
         """ return folder which has images"""
+        assert self._imgs_folder is not None
         return self._imgs_folder
 
     @imgs_folder.setter
-    def imgs_folder(self, path):
+    def imgs_folder(self, path: str) -> None:
         self._imgs_folder = pathlib.Path(path)
 
     @property
-    def anno_path(self):
+    def anno_path(self) -> pathlib.Path:
         """ path to the annotation.json file """
+        assert self._anno_path is not None
         return self._anno_path
 
     @anno_path.setter
-    def anno_path(self, path):
+    def anno_path(self, path: str) -> None:
         self._anno_path = pathlib.Path(path)
 
-    def fix_img_path(self, img_path):
+    def fix_img_path(self, img_path: str) -> str:
         """ Fix image location according to provided folder """
+        assert self._imgs_folder is not None
         path = pathlib.PureWindowsPath(img_path)
         my_path = self._imgs_folder / path.name
         return my_path.as_posix()
 
-    def parse_anno(self):
+    def parse_anno(self) -> None:
+        assert self._anno_path is not None
         with open(self._anno_path.as_posix()) as data_file:
             data = json.load(data_file, encoding=self.encode_method)
-        for (i, item) in enumerate(data):
+        for item in data:
             img_path = item['imageFilename']
             img_path = self.fix_img_path(img_path)
-            self.shapes.insert(i, {'img_path': img_path})
-            self.shapes[i]['bbox'] = []
+            boxes: List[BOX_TYPE] = []
             for box in item['Nodule']:
                 x_1, y_1, _w, _h = box
                 # Python count from 0 and slide omit last elem
-                self.shapes[i]['bbox'].append((x_1 - 1, y_1 - 1, x_1 + _w,
-                                               y_1 + _h, '1'))
+                boxes.append(BOX_TYPE(x_1 - 1, y_1 - 1, x_1 + _w,
+                                      y_1 + _h, '1'))
+            self.shapes.append(AnnosPerImage(boxes, img_path))
 
 
 class XmlParser(AnnoParser):
@@ -314,13 +317,13 @@ class XMLWriter(AnnoWriter):
         """ Transform data to dict of anno according to img name """
         img_vs_boxes: ImageAnnoDict = {}
         for img_file in self.data:
-            for box in img_file['bbox']:
+            for box in img_file.bbox:
                 box = self.binary_transform(box)
                 if box[4] == '0':
                     continue
-                if img_file['img_path'] not in img_vs_boxes:
-                    img_vs_boxes[img_file['img_path']] = []
-                img_vs_boxes[img_file['img_path']].append(box)
+                if img_file.img_path not in img_vs_boxes:
+                    img_vs_boxes[img_file.img_path] = []
+                img_vs_boxes[img_file.img_path].append(box)
         return img_vs_boxes
 
     def write(self) -> None:
