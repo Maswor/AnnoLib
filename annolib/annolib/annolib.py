@@ -1,4 +1,4 @@
-""" Internal Libs for manipulating annotations"""
+""" Internal Libs for manipulating annotations, Require Python 3"""
 import codecs
 import csv
 import json
@@ -14,12 +14,22 @@ import cv2
 from lxml import etree
 
 
+# Original List[Dict['bbox' =[(x1, y1, x2, y2, 'label')], 'img_path' = '']]
 class BOX_TYPE(NamedTuple):
     x_1: int
     y_1: int
     x_2: int
     y_2: int
     label: str
+
+
+class PASCAL_BOX_TYPE(NamedTuple):
+    x_1: int
+    y_1: int
+    x_2: int
+    y_2: int
+    label: str
+    difficulty: bool
 
 
 ImageAnnoDict = Dict[str, List[BOX_TYPE]]
@@ -180,31 +190,33 @@ class MatlabParser(AnnoParser):
 class XmlParser(AnnoParser):
     """ xml parser for standard VOC 2007 format """
 
-    def __init__(self, extension='.xml', encoding='utf-8'):
-        self.verified = False
-        self._folder_path = None
-        self.file_paths = None
+    def __init__(self, extension: str = '.xml',
+                 encoding: str = 'utf-8') -> None:
+        self.verified: bool = False
+        self._folder_path: Optional[pathlib.Path] = None
+        self.file_paths: List[pathlib.Path] = []
         super().__init__(extension, encoding)
 
     @property
-    def folder_path(self):
+    def folder_path(self) -> pathlib.Path:
         """ return folder path, note: we use indirection here """
+        assert self._folder_path is not None
         return self._folder_path
 
     @folder_path.setter
-    def folder_path(self, path):
+    def folder_path(self, path: str) -> None:
         """ set path to folder with .xml file """
         self._folder_path = pathlib.Path(path)
         self.file_paths = sorted(list(self._folder_path.glob('*.xml')))
 
     @staticmethod
-    def add_shape(bndbox, label):
+    def add_shape(bndbox, label: str) -> BOX_TYPE:
         """ each line adds (x1, y1, x2, y2, label) """
         xmin = int(bndbox.find('xmin').text)
         ymin = int(bndbox.find('ymin').text)
         xmax = int(bndbox.find('xmax').text)
         ymax = int(bndbox.find('ymax').text)
-        return (xmin, ymin, xmax, ymax, label)
+        return BOX_TYPE(xmin, ymin, xmax, ymax, label)
 
     def img_abs_path(self, img_rel_path):
         """ return absolute path of image, for traing """
@@ -214,29 +226,32 @@ class XmlParser(AnnoParser):
 
         return str(img_path.resolve())
 
-    def parse_anno(self):
-        for (i, filepath) in enumerate(self.file_paths):
+    def parse_anno(self) -> None:
+        for filepath in self.file_paths:
             assert filepath.suffix == self.xml_ext, "unsupported file format"
             parser = etree.XMLParser(encoding=self.encode_method)
             xmltree = ElementTree.parse(
                 filepath.as_posix(), parser=parser).getroot()
-
-            img_rel_path = xmltree.find('path').text
+            path_elem = xmltree.find('path')
+            assert path_elem is not None
+            img_rel_path = path_elem.text
             img_path = self.img_abs_path(img_rel_path)
             try:
                 verified = xmltree.attrib['verified']
                 self.verified = bool(verified)
             except KeyError:
                 self.verified = False
-            self.shapes.insert(i, {'img_path': img_path})
-            self.shapes[i]['bbox'] = []
-
+            bboxes: List[BOX_TYPE] = []
             for object_iter in xmltree.findall('object'):
                 bndbox = object_iter.find('bndbox')
-                label = object_iter.find('name').text
-                # Assume dificulty False
+                name_elem = object_iter.find('name')
+                assert name_elem is not None
+                label = name_elem.text
+                assert label is not None
                 my_box = self.add_shape(bndbox, label)
-                self.shapes[i]['bbox'].append(my_box)
+                # Assume dificulty False
+                bboxes.append(my_box)
+            self.shapes.append(AnnosPerImage(bboxes, img_path))
 
 
 class AnnoWriter(metaclass=ABCMeta):
@@ -244,58 +259,57 @@ class AnnoWriter(metaclass=ABCMeta):
 
     def __init__(self, parser_obj: AnnoParser, binary: bool = False) -> None:
         self.data = parser_obj.anno_data
-        # List[Dict['bbox' =[(x1, y1, x2, y2, 'label')], 'img_path' = '']]
         self.binary = binary
 
     @staticmethod
-    def create_writer(parser_obj, binary, anno_format):
+    def create_writer(parser_obj, binary, anno_format) -> "AnnoWriter":
         """ Delegate parser base on extension """
         if anno_format == '.csv':
             return CSVWriter(parser_obj, binary)
-        elif anno_format == '.xml':
+        if anno_format == '.xml':
             return XMLWriter(parser_obj, binary)
-        else:
-            raise ValueError('Unsupported file type')
+        raise ValueError('Unsupported file type')
 
     @abstractmethod
-    def write(self):
+    def write(self) -> None:
         """ Writing down the annotations (either to file or folder) """
         pass
 
-    def binary_transform(self, box):
+    def binary_transform(self, box: BOX_TYPE) -> BOX_TYPE:
         """ Transform box with label > 1 into label = 1 """
         x_1, y_1, x_2, y_2, label = box
         if self.binary:
-            if int(label) >= 1:
-                label = '1'
-        return (x_1, y_1, x_2, y_2, label)
+            label = "1" if int(box.label) > 1 else label
+        return BOX_TYPE(x_1, y_1, x_2, y_2, label)
 
 
 class CSVWriter(AnnoWriter):
     """ Implementation for writting Retinanet CSV """
 
-    def __init__(self, parser_obj, binary=False):
-        super().__init__(parser_obj, binary=False)
-        self.filename = None
+    def __init__(self, parser_obj, binary=False) -> None:
+        super().__init__(parser_obj, binary)
+        self.filename: Optional[str] = None
 
-    def set_output_file(self, file_name):
+    def set_output_file(self, file_name) -> None:
         """ Set file to store the annotations """
         self.filename = file_name
 
-    def write(self):
+    def write(self) -> None:
         """ Implementation for writting annos """
+        assert self.filename is not None
         with open(self.filename, 'w', newline='') as csvfile:
-            anno_writer = csv.writer(
-                csvfile,
-                delimiter=',',
-                quotechar='"',
-                quoting=csv.QUOTE_MINIMAL)
+            anno_writer = csv.writer(csvfile, delimiter=',',
+                                     quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            data_to_write: List[Tuple[str, int, int, int, int, str]] = []
             for img_file in self.data:
-                for box in img_file['bbox']:
+                for box in img_file.bbox:
                     box = self.binary_transform(box)
                     if box[4] == '0':
                         continue
-                    anno_writer.writerow((img_file['img_path'],) + box)
+                    data_to_write.append(
+                        (img_file.img_path, box.x_1, box.y_1, box.x_2, box.y_2,
+                         box.label))
+            map(anno_writer.writerow, data_to_write)
 
 
 class XMLWriter(AnnoWriter):
@@ -350,27 +364,25 @@ class XMLWriter(AnnoWriter):
 
 
 class PascalVocWriter:
+    """ Private writer for Pascal data format """
 
     def __init__(self,
-                 foldername,
-                 filename,
-                 imgSize,
-                 databaseSrc='Unknown',
-                 xmlFile=None,
-                 localImgPath=None):
+                 foldername: str,
+                 filename: str,
+                 imgSize: List[int],
+                 xmlFile: str,
+                 localImgPath: str) -> None:
         self.foldername = foldername
         self.filename = filename
-        self.databaseSrc = databaseSrc
+        self.databaseSrc = "Unknown"
         self.imgSize = imgSize
-        self.boxlist = []
+        self.boxlist: List[PASCAL_BOX_TYPE] = []
         self.localImgPath = localImgPath
         self.verified = False
         self.xmlFile = xmlFile
 
-    def prettify(self, elem):
-        """
-            Return a pretty-printed XML string for the Element.
-        """
+    def prettify(self, elem: Element) -> str:
+        """ Return a pretty-printed XML string for the Element """
         rough_string = ElementTree.tostring(elem, 'utf8')
         root = etree.fromstring(rough_string)
         return etree.tostring(
@@ -380,32 +392,28 @@ class PascalVocWriter:
         '''reparsed = minidom.parseString(rough_string)
         return reparsed.toprettyxml(indent="\t", encoding=ENCODE_METHOD)'''
 
-    def genXML(self):
-        """
-            Return XML root
-        """
-        # Check conditions
-        if self.filename is None or \
-                self.foldername is None or \
-                self.imgSize is None:
-            return None
-
+    def genXML(self) -> Element:
+        """ Return XML root """
+        # # Check conditions
+        # if self.filename is None or \
+        #         self.foldername is None or \
+        #         self.imgSize is None:
+        #     return None
         top = Element('annotation')
         if self.verified:
             top.set('verified', 'yes')
 
         folder = SubElement(top, 'folder')
         folder.text = self.foldername
-
         filename = SubElement(top, 'filename')
         filename.text = self.filename
 
-        if self.localImgPath is not None:
-            existed_path = pathlib.Path(self.xmlFile)
-            parent_folder = existed_path.parent
-            relativePath = relpath(self.localImgPath, str(parent_folder))
-            localImgPath = SubElement(top, 'path')
-            localImgPath.text = relativePath
+        # if self.localImgPath is not None:
+        existed_path = pathlib.Path(self.xmlFile)
+        parent_folder = existed_path.parent
+        relativePath = relpath(self.localImgPath, str(parent_folder))
+        localImgPath = SubElement(top, 'path')
+        localImgPath.text = relativePath
 
         source = SubElement(top, 'source')
         database = SubElement(source, 'database')
@@ -421,61 +429,55 @@ class PascalVocWriter:
             depth.text = str(self.imgSize[2])
         else:
             depth.text = '1'
-
         segmented = SubElement(top, 'segmented')
         segmented.text = '0'
         return top
 
-    def addBndBox(self, xmin, ymin, xmax, ymax, name, difficult):
-        bndbox = {'xmin': xmin, 'ymin': ymin, 'xmax': xmax, 'ymax': ymax}
-        bndbox['name'] = name
-        bndbox['difficult'] = difficult
+    def addBndBox(self, xmin: int, ymin: int, xmax: int, ymax: int,
+                  name: str, difficult: bool) -> None:
+        """ add bounding gox to internal record """
+        bndbox = PASCAL_BOX_TYPE(xmin, ymin, xmax, ymax, name, difficult)
         self.boxlist.append(bndbox)
 
-    def appendObjects(self, top):
+    def appendObjects(self, top) -> None:
         for each_object in self.boxlist:
             object_item = SubElement(top, 'object')
             name = SubElement(object_item, 'name')
-            try:
-                name.text = unicode(each_object['name'])
-            except NameError:
-                # Py3: NameError: name 'unicode' is not defined
-                name.text = each_object['name']
+            name.text = each_object.label
             pose = SubElement(object_item, 'pose')
             pose.text = "Unspecified"
             truncated = SubElement(object_item, 'truncated')
-            if int(each_object['ymax']) == int(self.imgSize[0]) or (int(
-                    each_object['ymin']) == 1):
+            if int(each_object.y_2) == int(self.imgSize[0]) or (int(
+                    each_object.y_1) == 1):
                 truncated.text = "1"  # max == height or min
-            elif (int(each_object['xmax']) == int(self.imgSize[1])) or (int(
-                    each_object['xmin']) == 1):
+            elif (int(each_object.x_2) == int(self.imgSize[1])) or (int(
+                    each_object.x_1) == 1):
                 truncated.text = "1"  # max == width or min
             else:
                 truncated.text = "0"
             difficult = SubElement(object_item, 'difficult')
-            difficult.text = str(bool(each_object['difficult']) & 1)
+            difficult.text = str(each_object.difficulty & 1)
             bndbox = SubElement(object_item, 'bndbox')
             xmin = SubElement(bndbox, 'xmin')
-            xmin.text = str(each_object['xmin'])
+            xmin.text = str(each_object.x_1)
             ymin = SubElement(bndbox, 'ymin')
-            ymin.text = str(each_object['ymin'])
+            ymin.text = str(each_object.y_1)
             xmax = SubElement(bndbox, 'xmax')
-            xmax.text = str(each_object['xmax'])
+            xmax.text = str(each_object.x_2)
             ymax = SubElement(bndbox, 'ymax')
-            ymax.text = str(each_object['ymax'])
+            ymax.text = str(each_object.y_2)
 
-    def save(self, targetFile=None):
+    def save(self, targetFile: str) -> None:
         root = self.genXML()
         self.appendObjects(root)
-        out_file = None
-        if targetFile is None:
-            out_file = codecs.open(
-                self.filename + '.xml', 'w', encoding='utf-8')
-        else:
-            out_file = codecs.open(targetFile, 'w', encoding='utf-8')
-
+        # out_file = None
+        # if targetFile is None:
+        #     out_file = codecs.open(
+        #         self.filename + '.xml', 'w', encoding='utf-8')
+        # else:
+        out_file = codecs.open(targetFile, 'w', encoding='utf-8')
         prettifyResult = self.prettify(root)
-        out_file.write(prettifyResult.decode('utf8'))
+        out_file.write(prettifyResult)
         out_file.close()
 
 
@@ -493,7 +495,7 @@ def create_corresponding_file(folder: pathlib.Path,
 
 def write_pascal_voc(img_folder_name: str, img_file_name: str,
                      img_shape: List[int], xml_file: str, img_path: str,
-                     boxes: List[BOX_TYPE]):
+                     boxes: List[BOX_TYPE]) -> None:
     """ helper function to use PascalVocWriter class """
     writer = PascalVocWriter(
         img_folder_name,
