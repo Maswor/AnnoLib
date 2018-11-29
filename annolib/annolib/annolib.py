@@ -52,7 +52,7 @@ class AnnoParser(metaclass=ABCMeta):
         super().__init__()
 
     @abstractmethod
-    def parse_anno(self) -> None:
+    def parse_anno(self) -> AnnoDatabase:
         """
         abstract method, will be implemented diffirently by children
         parse annotation either form .xml file or matlab json file
@@ -70,12 +70,8 @@ class AnnoParser(metaclass=ABCMeta):
         # Empty List valuates to fall
         if self.shapes:
             return self.shapes
-        self.parse_anno()
+        self.shapes = self.parse_anno()
         return self.shapes
-
-    @anno_data.setter
-    def anno_data(self, data) -> None:
-        self.shapes = data
 
 
 class CSVParser(AnnoParser):
@@ -89,11 +85,13 @@ class CSVParser(AnnoParser):
         """ Add annotations for given file """
         self.anno_file = pathlib.Path(path)
 
-    def parse_anno(self) -> None:
+    def parse_anno(self) -> AnnoDatabase:
         proto_data = self._create_proto_anno()
+        return_data: AnnoDatabase = []
         for path, custom_anno in proto_data.items():
             img_annos = AnnosPerImage(custom_anno, path)
-            self.shapes.append(img_annos)
+            return_data.append(img_annos)
+        return return_data
 
     def _create_proto_anno(self) -> ImageAnnoDict:
         """ intermediate representation of annotations """
@@ -161,8 +159,9 @@ class MatlabParser(AnnoParser):
         my_path = self._imgs_folder / path.name
         return my_path.as_posix()
 
-    def parse_anno(self) -> None:
+    def parse_anno(self) -> AnnoDatabase:
         assert self._anno_path is not None
+        return_data: AnnoDatabase = []
         with open(self._anno_path.as_posix()) as data_file:
             data = json.load(data_file, encoding=self.encode_method)
         for item in data:
@@ -174,7 +173,8 @@ class MatlabParser(AnnoParser):
                 # Python count from 0 and slide omit last elem
                 boxes.append(
                     BOX_TYPE(x_1 - 1, y_1 - 1, x_1 + _w, y_1 + _h, '1'))
-            self.shapes.append(AnnosPerImage(boxes, img_path))
+            return_data.append(AnnosPerImage(boxes, img_path))
+        return return_data
 
 
 class XmlParser(AnnoParser):
@@ -215,7 +215,8 @@ class XmlParser(AnnoParser):
 
         return str(img_path.resolve())
 
-    def parse_anno(self) -> None:
+    def parse_anno(self) -> AnnoDatabase:
+        return_data: AnnoDatabase = []
         for filepath in self.file_paths:
             parser = etree.XMLParser(encoding=self.encode_method)
             xmltree = ElementTree.parse(
@@ -239,7 +240,8 @@ class XmlParser(AnnoParser):
                 my_box = self.add_shape(bndbox, label)
                 # Assume dificulty False
                 bboxes.append(my_box)
-            self.shapes.append(AnnosPerImage(bboxes, img_path))
+            return_data.append(AnnosPerImage(bboxes, img_path))
+        return return_data
 
 
 class AnnoWriter(metaclass=ABCMeta):
