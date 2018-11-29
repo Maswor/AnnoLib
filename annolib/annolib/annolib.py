@@ -352,12 +352,12 @@ class PascalVocWriter:
                  xmlFile: str, localImgPath: str) -> None:
         self.foldername = foldername
         self.filename = filename
-        self.databaseSrc = "Unknown"
-        self.imgSize = imgSize
+        self.database_src = "Unknown"
+        self.img_size = imgSize
         self.boxlist: List[PASCAL_BOX_TYPE] = []
-        self.localImgPath = localImgPath
+        self.local_img_path = localImgPath
         self.verified = False
-        self.xmlFile = xmlFile
+        self.xml_file = xmlFile
 
     def prettify(self, elem: Element) -> str:
         """ Return a pretty-printed XML string for the Element """
@@ -375,7 +375,7 @@ class PascalVocWriter:
         # # Check conditions
         # if self.filename is None or \
         #         self.foldername is None or \
-        #         self.imgSize is None:
+        #         self.img_size is None:
         #     return None
         top = Element('annotation')
         if self.verified:
@@ -386,25 +386,25 @@ class PascalVocWriter:
         filename = SubElement(top, 'filename')
         filename.text = self.filename
 
-        # if self.localImgPath is not None:
-        existed_path = pathlib.Path(self.xmlFile)
+        # if self.local_img_path is not None:
+        existed_path = pathlib.Path(self.xml_file)
         parent_folder = existed_path.parent
-        relativePath = relpath(self.localImgPath, str(parent_folder))
+        relativePath = relpath(self.local_img_path, str(parent_folder))
         localImgPath = SubElement(top, 'path')
         localImgPath.text = relativePath
 
         source = SubElement(top, 'source')
         database = SubElement(source, 'database')
-        database.text = self.databaseSrc
+        database.text = self.database_src
 
         size_part = SubElement(top, 'size')
         width = SubElement(size_part, 'width')
         height = SubElement(size_part, 'height')
         depth = SubElement(size_part, 'depth')
-        width.text = str(self.imgSize[1])
-        height.text = str(self.imgSize[0])
-        if len(self.imgSize) == 3:
-            depth.text = str(self.imgSize[2])
+        width.text = str(self.img_size[1])
+        height.text = str(self.img_size[0])
+        if len(self.img_size) == 3:
+            depth.text = str(self.img_size[2])
         else:
             depth.text = '1'
         segmented = SubElement(top, 'segmented')
@@ -425,10 +425,10 @@ class PascalVocWriter:
             pose = SubElement(object_item, 'pose')
             pose.text = "Unspecified"
             truncated = SubElement(object_item, 'truncated')
-            if int(each_object.y_2) == int(self.imgSize[0]) or (int(
+            if int(each_object.y_2) == int(self.img_size[0]) or (int(
                     each_object.y_1) == 1):
                 truncated.text = "1"    # max == height or min
-            elif (int(each_object.x_2) == int(self.imgSize[1])) or (int(
+            elif (int(each_object.x_2) == int(self.img_size[1])) or (int(
                     each_object.x_1) == 1):
                 truncated.text = "1"    # max == width or min
             else:
