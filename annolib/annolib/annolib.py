@@ -46,8 +46,7 @@ AnnoDatabase = List[AnnosPerImage]
 class AnnoParser(metaclass=ABCMeta):
     """Abstract class for xml parser and matlab file parser"""
 
-    def __init__(self, extension: str, encoding: str) -> None:
-        self.xml_ext = extension
+    def __init__(self, encoding: str) -> None:
         self.encode_method = encoding
         self.shapes: AnnoDatabase = []
         super().__init__()
@@ -68,17 +67,22 @@ class AnnoParser(metaclass=ABCMeta):
         self.shapes = [{'bbox' =[(x1, y1, x2, y2, 'label')], 'img_path' = ''}]
 
         """
+        # Empty List valuates to fall
         if self.shapes:
             return self.shapes
         self.parse_anno()
         return self.shapes
 
+    @anno_data.setter
+    def anno_data(self, data) -> None:
+        self.shapes = data
+
 
 class CSVParser(AnnoParser):
     """ CSV (i.e. Retinanet) annotations parser """
 
-    def __init__(self, extension: str, encoding: str) -> None:
-        super().__init__(extension, encoding)
+    def __init__(self, encoding: str) -> None:
+        super().__init__(encoding)
         self.anno_file: Optional[pathlib.Path] = None
 
     def set_anno_file(self, path: str) -> None:
@@ -124,12 +128,11 @@ class MatlabParser(AnnoParser):
     5th: fclose(fid)
     """
 
-    def __init__(self, extension: str = '.json',
-                 encoding: str = 'utf-8') -> None:
+    def __init__(self, encoding: str = 'utf-8') -> None:
         """ x, y, width, height """
         self._anno_path: Optional[pathlib.Path] = None
         self._imgs_folder: Optional[pathlib.Path] = None
-        super().__init__(extension, encoding)
+        super().__init__(encoding)
 
     @property
     def imgs_folder(self) -> pathlib.Path:
@@ -177,12 +180,11 @@ class MatlabParser(AnnoParser):
 class XmlParser(AnnoParser):
     """ xml parser for standard VOC 2007 format """
 
-    def __init__(self, extension: str = '.xml',
-                 encoding: str = 'utf-8') -> None:
+    def __init__(self, encoding: str = 'utf-8') -> None:
         self.verified: bool = False
         self._folder_path: Optional[pathlib.Path] = None
         self.file_paths: List[pathlib.Path] = []
-        super().__init__(extension, encoding)
+        super().__init__(encoding)
 
     @property
     def folder_path(self) -> pathlib.Path:
@@ -215,7 +217,6 @@ class XmlParser(AnnoParser):
 
     def parse_anno(self) -> None:
         for filepath in self.file_paths:
-            assert filepath.suffix == self.xml_ext, "unsupported file format"
             parser = etree.XMLParser(encoding=self.encode_method)
             xmltree = ElementTree.parse(
                 filepath.as_posix(), parser=parser).getroot()
@@ -255,10 +256,8 @@ class AnnoWriter(metaclass=ABCMeta):
 
     def binary_transform(self, box: BOX_TYPE) -> BOX_TYPE:
         """ Transform box with label > 1 into label = 1 """
-        x_1, y_1, x_2, y_2, label = box
-        if self.binary:
-            label = "1" if int(box.label) > 1 else label
-        return BOX_TYPE(x_1, y_1, x_2, y_2, label)
+        label = "1" if self.binary and int(box.label) > 1 else box.label
+        return BOX_TYPE(box.x_1, box.y_1, box.x_2, box.y_2, label)
 
 
 class CSVWriter(AnnoWriter):

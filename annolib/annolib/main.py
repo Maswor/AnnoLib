@@ -45,13 +45,13 @@ def select_parser(arg_input: str) -> AnnoParser:
     m_input = pathlib.Path(arg_input)
     my_parser: AnnoParser
     if m_input.is_dir():
-        my_parser = XmlParser(".xml", "utf-8")
+        my_parser = XmlParser("utf-8")
         my_parser.folder_path = m_input
     elif m_input.suffix == '.csv':
-        my_parser = CSVParser('.csv', 'utf-8')
+        my_parser = CSVParser('utf-8')
         my_parser.set_anno_file(arg_input)
     elif m_input.suffix == '.json':
-        my_parser = MatlabParser('.json', 'utf-8')
+        my_parser = MatlabParser('utf-8')
         my_parser.anno_path = m_input
     else:
         raise ValueError(
@@ -81,7 +81,5 @@ def main() -> None:
     """ Main program, as a function to avoid setting up grobal variables """
     p_args = parse_args(sys.argv[1:])
     my_parser = select_parser(p_args.input)
-    my_data = my_parser.anno_data    # lazily parsing annos on demand
     my_writer = select_writer(p_args.output, my_parser, p_args.binary)
     my_writer.write()
-    print_info(my_data)
