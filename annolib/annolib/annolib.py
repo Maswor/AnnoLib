@@ -52,18 +52,6 @@ class AnnoParser(metaclass=ABCMeta):
         self.shapes: AnnoDatabase = []
         super().__init__()
 
-    @staticmethod
-    def create_parser(extension: str = '.xml',
-                      encoding: str = 'utf-8') -> "AnnoParser":
-        """ Delegate parser base on extension """
-        if extension == '.xml':
-            return XmlParser(extension, encoding)
-        if extension == '.json':
-            return MatlabParser(extension, encoding)
-        if extension == '.csv':
-            return CSVParser(extension, encoding)
-        raise ValueError('Unsupported file type')
-
     @abstractmethod
     def parse_anno(self) -> None:
         """
@@ -115,11 +103,10 @@ class CSVParser(AnnoParser):
                 quoting=csv.QUOTE_MINIMAL)
             for anno_line in anno_reader:
                 img_path = anno_line[0]
-                box = BOX_TYPE(int(float(anno_line[1])),
-                               int(float(anno_line[2])),
-                               int(float(anno_line[3])),
-                               int(float(anno_line[4])),
-                               anno_line[5])
+                box = BOX_TYPE(
+                    int(float(anno_line[1])), int(float(anno_line[2])),
+                    int(float(anno_line[3])), int(float(anno_line[4])),
+                    anno_line[5])
                 if img_path not in proto_data:
                     proto_data[img_path] = []
                 proto_data[img_path].append(box)
@@ -182,8 +169,8 @@ class MatlabParser(AnnoParser):
             for box in item['Nodule']:
                 x_1, y_1, _w, _h = box
                 # Python count from 0 and slide omit last elem
-                boxes.append(BOX_TYPE(x_1 - 1, y_1 - 1, x_1 + _w,
-                                      y_1 + _h, '1'))
+                boxes.append(
+                    BOX_TYPE(x_1 - 1, y_1 - 1, x_1 + _w, y_1 + _h, '1'))
             self.shapes.append(AnnosPerImage(boxes, img_path))
 
 
@@ -261,15 +248,6 @@ class AnnoWriter(metaclass=ABCMeta):
         self.data = parser_obj.anno_data
         self.binary = binary
 
-    @staticmethod
-    def create_writer(parser_obj, binary, anno_format) -> "AnnoWriter":
-        """ Delegate parser base on extension """
-        if anno_format == '.csv':
-            return CSVWriter(parser_obj, binary)
-        if anno_format == '.xml':
-            return XMLWriter(parser_obj, binary)
-        raise ValueError('Unsupported file type')
-
     @abstractmethod
     def write(self) -> None:
         """ Writing down the annotations (either to file or folder) """
@@ -298,18 +276,22 @@ class CSVWriter(AnnoWriter):
         """ Implementation for writting annos """
         assert self.filename is not None
         with open(self.filename, 'w', newline='') as csvfile:
-            anno_writer = csv.writer(csvfile, delimiter=',',
-                                     quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            # anno_writer = csv.writer(
+            #     csvfile,
+            #     delimiter=',',
+            #     quotechar='"',
+            #     quoting=csv.QUOTE_MINIMAL)
+            anno_writer = csv.writer(csvfile, dialect='excel')
             data_to_write: List[Tuple[str, int, int, int, int, str]] = []
             for img_file in self.data:
                 for box in img_file.bbox:
                     box = self.binary_transform(box)
                     if box[4] == '0':
                         continue
-                    data_to_write.append(
-                        (img_file.img_path, box.x_1, box.y_1, box.x_2, box.y_2,
-                         box.label))
-            map(anno_writer.writerow, data_to_write)
+                    data_to_write.append((img_file.img_path, box.x_1, box.y_1,
+                                          box.x_2, box.y_2, box.label))
+            for line in data_to_write:
+                anno_writer.writerow(line)
 
 
 class XMLWriter(AnnoWriter):
@@ -354,10 +336,9 @@ class XMLWriter(AnnoWriter):
             new_file_path = create_corresponding_file(self.out_folder, path,
                                                       '.xml')
             xml_file = str(new_file_path)
-            img = cv2.imread(str(path))  # very heavy
-            print(
-                "Reading file {} to find its dimentions, please wait...".format(
-                    img_file_name))
+            img = cv2.imread(str(path))    # very heavy
+            print("Reading file {} to find its dimentions, please wait...".
+                  format(img_file_name))
             img_shape = list(img.shape)
             write_pascal_voc(img_folder_name, img_file_name, img_shape,
                              xml_file, str(path), boxes)
@@ -366,12 +347,8 @@ class XMLWriter(AnnoWriter):
 class PascalVocWriter:
     """ Private writer for Pascal data format """
 
-    def __init__(self,
-                 foldername: str,
-                 filename: str,
-                 imgSize: List[int],
-                 xmlFile: str,
-                 localImgPath: str) -> None:
+    def __init__(self, foldername: str, filename: str, imgSize: List[int],
+                 xmlFile: str, localImgPath: str) -> None:
         self.foldername = foldername
         self.filename = filename
         self.databaseSrc = "Unknown"
@@ -433,8 +410,8 @@ class PascalVocWriter:
         segmented.text = '0'
         return top
 
-    def addBndBox(self, xmin: int, ymin: int, xmax: int, ymax: int,
-                  name: str, difficult: bool) -> None:
+    def addBndBox(self, xmin: int, ymin: int, xmax: int, ymax: int, name: str,
+                  difficult: bool) -> None:
         """ add bounding gox to internal record """
         bndbox = PASCAL_BOX_TYPE(xmin, ymin, xmax, ymax, name, difficult)
         self.boxlist.append(bndbox)
@@ -449,10 +426,10 @@ class PascalVocWriter:
             truncated = SubElement(object_item, 'truncated')
             if int(each_object.y_2) == int(self.imgSize[0]) or (int(
                     each_object.y_1) == 1):
-                truncated.text = "1"  # max == height or min
+                truncated.text = "1"    # max == height or min
             elif (int(each_object.x_2) == int(self.imgSize[1])) or (int(
                     each_object.x_1) == 1):
-                truncated.text = "1"  # max == width or min
+                truncated.text = "1"    # max == width or min
             else:
                 truncated.text = "0"
             difficult = SubElement(object_item, 'difficult')

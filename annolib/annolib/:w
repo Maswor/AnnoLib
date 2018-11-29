@@ -7,6 +7,15 @@ from annolib.annolib import (AnnoDatabase, AnnoParser, AnnoWriter, CSVParser,
                              CSVWriter, MatlabParser, XmlParser, XMLWriter)
 
 
+def create_writer(parser_obj, binary, anno_format) -> "AnnoWriter":
+    """ Delegate parser base on extension """
+    if anno_format == '.csv':
+        return CSVWriter(parser_obj, binary)
+    if anno_format == '.xml':
+        return XMLWriter(parser_obj, binary)
+    raise ValueError('Unsupported file type')
+
+
 def print_info(anno_data: AnnoDatabase) -> None:
     """ Printing boxes information """
     total_imgs = 0
@@ -14,8 +23,8 @@ def print_info(anno_data: AnnoDatabase) -> None:
     boxes_indices = [0 for _ in range(10)]
     for img_file in anno_data:
         total_imgs += 1
-        total_boxes += len(img_file.bbox)
-        for box in img_file.bbox:
+        total_boxes += len(img_file['bbox'])
+        for box in img_file['bbox']:
             boxes_indices[int(box[4])] += 1
     print("There are {} images with {} boxes".format(total_imgs, total_boxes))
     print("Of which, number for DS score from 0 - 9 are: {}".format(
@@ -26,12 +35,12 @@ def select_writer(arg_output: str, parser: AnnoParser,
                   binary: bool) -> AnnoWriter:
     """ Writer selection depending on arg_output """
     m_output = pathlib.Path(arg_output)
-    my_writer: AnnoWriter
     if m_output.is_dir():
         my_writer = XMLWriter(parser, binary)
+        my_writer = AnnoWriter.create_writer(parser, binary, '.xml')
         my_writer.set_output_folder(arg_output)
     elif m_output.suffix == '.csv':
-        my_writer = CSVWriter(parser, binary)
+        my_writer = AnnoWriter.create_writer(parser, binary, '.csv')
         my_writer.set_output_file(arg_output)
     else:
         raise ValueError(
@@ -84,4 +93,4 @@ def main() -> None:
     my_data = my_parser.anno_data    # lazily parsing annos on demand
     my_writer = select_writer(p_args.output, my_parser, p_args.binary)
     my_writer.write()
-    print_info(my_data)
+    # print_info(my_data)
