@@ -6,6 +6,7 @@ import pathlib
 import warnings
 from abc import ABCMeta, abstractmethod
 from os.path import relpath
+from random import shuffle
 from typing import Dict, List, NamedTuple, Optional, Tuple
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element, SubElement
@@ -257,7 +258,7 @@ class AnnoWriter(metaclass=ABCMeta):
         pass
 
     def binary_transform(self, box: BOX_TYPE) -> BOX_TYPE:
-        """ Transform box with label > 1 into label = 1 """
+        """ Optional transform box according to binary value"""
         label = "1" if self.binary and int(box.label) > 1 else box.label
         return BOX_TYPE(box.x_1, box.y_1, box.x_2, box.y_2, label)
 
@@ -285,6 +286,49 @@ class CSVWriter(AnnoWriter):
             anno_writer = csv.writer(csvfile, dialect='excel')
             data_to_write: List[Tuple[str, int, int, int, int, str]] = []
             for img_file in self.data:
+                for box in img_file.bbox:
+                    box = self.binary_transform(box)
+                    if box[4] == '0':
+                        continue
+                    data_to_write.append((img_file.img_path, box.x_1, box.y_1,
+                                          box.x_2, box.y_2, box.label))
+            for line in data_to_write:
+                anno_writer.writerow(line)
+
+
+class CSVTrainTestWriter(AnnoWriter):
+    """ Implementation for writting Retinanet CSV """
+
+    def __init__(self, parser_obj, split: float, binary=False) -> None:
+        super().__init__(parser_obj, binary)
+        assert (0 < split < 1)
+        self.train_file: Optional[str] = None
+        self.test_file: Optional[str] = None
+        self.split = split
+        self.train_data: AnnoDatabase = []
+        self.test_data: AnnoDatabase = []
+
+    def set_output_file(self, train_file: str, test_file: str) -> None:
+        """ Set file to store the annotations """
+        self.train_file = train_file
+        self.test_file = test_file
+        shuffle(self.data)
+        data_length = len(self.data)
+        self.train_data = self.data[:int(self.split * data_length)]
+        self.test_data = self.data[int(self.split * data_length):]
+
+    def write(self) -> None:
+        assert self.train_file is not None
+        assert self.test_file is not None
+        self._write(self.train_file, self.train_data)
+        self._write(self.test_file, self.test_data)
+
+    def _write(self, file: str, data: AnnoDatabase) -> None:
+        """ Implementation for writting annos """
+        with open(file, 'w', newline='') as csvfile:
+            anno_writer = csv.writer(csvfile, dialect='excel')
+            data_to_write: List[Tuple[str, int, int, int, int, str]] = []
+            for img_file in data:
                 for box in img_file.bbox:
                     box = self.binary_transform(box)
                     if box[4] == '0':
