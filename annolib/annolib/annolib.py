@@ -4,10 +4,11 @@ import csv
 import json
 import pathlib
 import warnings
+from collections import defaultdict
 from abc import ABCMeta, abstractmethod
 from os.path import relpath
 from random import shuffle
-from typing import Dict, List, NamedTuple, Optional, Tuple
+from typing import Dict, List, NamedTuple, Optional, Tuple, Dict
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element, SubElement
 
@@ -312,10 +313,26 @@ class CSVTrainTestWriter(AnnoWriter):
         """ Set file to store the annotations """
         self.train_file = train_file
         self.test_file = test_file
+        self._print_data_info()
         shuffle(self.data)
         data_length = len(self.data)
         self.train_data = self.data[:int(self.split * data_length)]
         self.test_data = self.data[int(self.split * data_length):]
+
+    def _print_data_info(self) -> None:
+        """ Print information about anno Data """
+        imgs_annotated = len(self.data)
+        total_boxes = 0
+        ds_counter: Dict[str, int] = defaultdict(int)
+        for img_data in self.data:
+            for box in img_data.bbox:
+                ds_counter[box.label] += 1
+        print("There are {} images annotated, with DS score distributed as".
+              format(imgs_annotated))
+        for key, value in ds_counter.items():
+            total_boxes += value
+            print("DS Score {}: {} boxes".format(key, value))
+        print("Totally: {} boxes".format(total_boxes))
 
     def write(self) -> None:
         assert self.train_file is not None
