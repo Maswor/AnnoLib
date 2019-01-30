@@ -24,7 +24,9 @@ def print_info(anno_data: AnnoDatabase) -> None:
 
 def select_writer(arg_output: str, parser: AnnoParser,
                   binary: bool) -> AnnoWriter:
-    """ Writer selection depending on arg_output """
+    """ Writer selection depending on arg_output
+    :param arg_output YOLO
+    """
     m_output = pathlib.Path(arg_output)
     my_writer: AnnoWriter
     if m_output.is_dir():

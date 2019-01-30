@@ -7,7 +7,7 @@ import warnings
 from collections import defaultdict
 from abc import ABCMeta, abstractmethod
 from os.path import relpath
-from random import shuffle
+from random import shuffle, seed
 from typing import Dict, List, NamedTuple, Optional, Tuple, Dict
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element, SubElement
@@ -311,6 +311,7 @@ class CSVTrainTestWriter(AnnoWriter):
 
     def set_output_file(self, train_file: str, test_file: str) -> None:
         """ Set file to store the annotations """
+        seed(1993) # fixed randomness for reproducible
         self.train_file = train_file
         self.test_file = test_file
         self._print_data_info()
