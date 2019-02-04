@@ -1,0 +1,69 @@
+__Aquiring Database resource__
+The size of box 87.75 after compress is 30.46875. Bad
+The size of box 81 after compress is 28.125. Bad
+The size of box 81 after compress is 28.125. Bad
+The size of box 87.75 after compress is 30.46875. Bad
+The size of box 81 after compress is 28.125. Bad
+The size of box 74.25 after compress is 25.78125. Bad
+The size of box 67.5 after compress is 23.4375. Bad
+The size of box 81 after compress is 28.125. Bad
+The size of box 87.75 after compress is 30.46875. Bad
+The size of box 87.75 after compress is 30.46875. Bad
+The size of box 67.5 after compress is 23.4375. Bad
+The size of box 87.75 after compress is 30.46875. Bad
+The size of box 67.5 after compress is 23.4375. Bad
+The size of box 67.5 after compress is 23.4375. Bad
+The size of box 81 after compress is 28.125. Bad
+The size of box 74.25 after compress is 25.78125. Bad
+The size of box 87.75 after compress is 30.46875. Bad
+The size of box 81 after compress is 28.125. Bad
+The size of box 67.5 after compress is 23.4375. Bad
+The size of box 87.75 after compress is 30.46875. Bad
+The size of box 74.25 after compress is 25.78125. Bad
+The size of box 67.5 after compress is 23.4375. Bad
+The size of box 87.75 after compress is 30.46875. Bad
+The size of box 74.25 after compress is 25.78125. Bad
+The size of box 67.5 after compress is 23.4375. Bad
+The size of box 81 after compress is 28.125. Bad
+The size of box 87.75 after compress is 30.46875. Bad
+The size of box 74.25 after compress is 25.78125. Bad
+The size of box 81 after compress is 28.125. Bad
+The size of box 67.5 after compress is 23.4375. Bad
+The size of box 74.25 after compress is 25.78125. Bad
+The size of box 87.75 after compress is 30.46875. Bad
+The size of box 67.5 after compress is 23.4375. Bad
+The size of box 74.25 after compress is 25.78125. Bad
+The size of box 87.75 after compress is 30.46875. Bad
+The size of box 74.25 after compress is 25.78125. Bad
+The size of box 67.5 after compress is 23.4375. Bad
+The size of box 67.5 after compress is 23.4375. Bad
+The size of box 81 after compress is 28.125. Bad
+The size of box 81 after compress is 28.125. Bad
+The size of box 74.25 after compress is 25.78125. Bad
+The size of box 87.75 after compress is 30.46875. Bad
+The size of box 81 after compress is 28.125. Bad
+The size of box 67.5 after compress is 23.4375. Bad
+The size of box 74.25 after compress is 25.78125. Bad
+The size of box 87.75 after compress is 30.46875. Bad
+The size of box 81 after compress is 28.125. Bad
+The size of box 67.5 after compress is 23.4375. Bad
+The size of box 67.5 after compress is 23.4375. Bad
+The size of box 81 after compress is 28.125. Bad
+The size of box 67.5 after compress is 23.4375. Bad
+The size of box 81 after compress is 28.125. Bad
+The size of box 87.75 after compress is 30.46875. Bad
+The size of box 74.25 after compress is 25.78125. Bad
+Error input detected, skipping problematic line
+The size of box 87.75 after compress is 30.46875. Bad
+The size of box 81 after compress is 28.125. Bad
+The size of box 67.5 after compress is 23.4375. Bad
+The size of box 67.5 after compress is 23.4375. Bad
+The size of box 67.5 after compress is 23.4375. Bad
+__Release Database resource__
+There are 693 images annotated, with DS score distributed as
+DS Score 1: 1756 boxes
+DS Score 2: 2490 boxes
+DS Score 4: 894 boxes
+DS Score 5: 907 boxes
+DS Score 3: 1635 boxes
+Totally: 7682 boxes
